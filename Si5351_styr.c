@@ -8,6 +8,7 @@
 extern struct Si5351Status dev_status;
 extern struct Si5351IntStatus dev_int_status;
 
+#define ADCBITS 10
 #define ADC2 2
 #define POT_PIN PB4
 #define DIG_PIN PB3
@@ -71,10 +72,15 @@ void sleep(uint16_t millisec)
     }
 }
 
-#define CLK0_FREQ 3500000UL
+#define CLK0_BASE    3500000UL
+#define CLK0_COARSE   100000UL
+#define CLK0_FINE      10000UL
 
 int main()
 {
+    int newVal, oldVal = 0;
+    int32_t range0 = 0, range1 = 0;
+    int potMode = 0;
     // Initialize pins
     CLRBIT(DDRB, POT_PIN); // Pot = input
     CLRBIT(DDRB, DIG_PIN); // Dig = input
@@ -93,7 +99,7 @@ int main()
     si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0);
 
     si5351_output_enable(SI5351_CLK0, 1);
-    si5351_set_freq(CLK0_FREQ, SI5351_CLK0);
+    si5351_set_freq(CLK0_BASE, SI5351_CLK0);
     si5351_drive_strength(SI5351_CLK0, SI5351_DRIVE_2MA);
 
     // There will be some inherent error in the reference crystal's actual frequency, so we can measure the difference between the actual and nominal output frequency in Hz, multiply by 10, make it an integer, and enter this correction factor into the library.
@@ -101,22 +107,40 @@ int main()
 
     while(1)
     {
+	/*
         si5351_update_status();
 
         if(dev_int_status.SYS_INIT_STKY)
             SETBIT(PORTB, LED_PIN);
         else
             CLRBIT(PORTB, LED_PIN);
+	*/
+	newVal = digitalRead();
+	if(oldVal != newVal && !newVal) {
+		potMode = !potMode;
+		if(potMode)
+			SETBIT(PORTB, LED_PIN);
+		else
+			CLRBIT(PORTB, LED_PIN);
+	}
+	oldVal = newVal;
 
-        /*
-        uint16_t val = analogRead();
+	uint16_t val = analogRead();
+        if(potMode) {
+		range1 = (val * CLK0_FINE) >> ADCBITS;
+		range1 = range1 - (CLK0_FINE/2);
+	} else {
+		range0 = (val * CLK0_COARSE) >> ADCBITS;
+	}
+	si5351_set_freq(CLK0_BASE + range0 + range1, SI5351_CLK0);
         //analogWrite(128);
 
+/*
         SETBIT(PORTB, LED_PIN);
         sleep(val);
         CLRBIT(PORTB, LED_PIN);
         sleep(val);
-        */
+*/        
         /*
         if(digitalRead())
             CLRBIT(PORTB, LED_PIN);
