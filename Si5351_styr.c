@@ -48,21 +48,6 @@ inline int digitalRead()
     return GETBIT(PINB, DIG_PIN);
 }
 
-
-// Right now, PWM output only works on the pins with
-// hardware support.  These are defined in the appropriate
-// pins_*.c file.  For the rest of the pins, we default
-// to digital output.
-
-//TODO DOESN*T WORK!!!
-void analogWrite(uint8_t val)
-{
-    SETBIT(TCCR0A, COM0B1);
-    OCR0B = val; // set pwm duty
-}
-
-
-
 void sleep(uint16_t millisec)
 {
     while(millisec)
@@ -71,6 +56,8 @@ void sleep(uint16_t millisec)
         millisec--;
     }
 }
+
+// Defines for frequency ranges
 
 #define CLK0_BASE    3500000UL
 #define CLK0_COARSE   100000UL
@@ -107,47 +94,33 @@ int main()
 
     while(1)
     {
-	/*
-        si5351_update_status();
+        // Handle button presses. Switch between coarse and fine mode (potMode 0=Coarse, 1=Fine).
+        newVal = digitalRead();
+        if(oldVal != newVal && !newVal) {
+            potMode = !potMode;
+            if(potMode)
+                SETBIT(PORTB, LED_PIN);
+            else
+                CLRBIT(PORTB, LED_PIN);
+        }
+        oldVal = newVal;
 
-        if(dev_int_status.SYS_INIT_STKY)
-            SETBIT(PORTB, LED_PIN);
-        else
-            CLRBIT(PORTB, LED_PIN);
-	*/
-	newVal = digitalRead();
-	if(oldVal != newVal && !newVal) {
-		potMode = !potMode;
-		if(potMode)
-			SETBIT(PORTB, LED_PIN);
-		else
-			CLRBIT(PORTB, LED_PIN);
-	}
-	oldVal = newVal;
-
-	uint16_t val = analogRead();
+        // Read pot
+        uint16_t val = analogRead();
+        // Set fine
         if(potMode) {
-		range1 = (val * CLK0_FINE) >> ADCBITS;
-		range1 = range1 - (CLK0_FINE/2);
-	} else {
-		range0 = (val * CLK0_COARSE) >> ADCBITS;
-	}
-	si5351_set_freq(CLK0_BASE + range0 + range1, SI5351_CLK0);
-        //analogWrite(128);
-
-/*
-        SETBIT(PORTB, LED_PIN);
-        sleep(val);
-        CLRBIT(PORTB, LED_PIN);
-        sleep(val);
-*/        
-        /*
-        if(digitalRead())
-            CLRBIT(PORTB, LED_PIN);
-        else
-            SETBIT(PORTB, LED_PIN);
-        */
+            range1 = (val * CLK0_FINE) >> ADCBITS;
+            range1 = range1 - (CLK0_FINE/2);
+        }
+        // Set coarse
+        else {
+            range0 = (val * CLK0_COARSE) >> ADCBITS;
+        }
+        // Set frequency
+        si5351_set_freq(CLK0_BASE + range0 + range1, SI5351_CLK0);
     }
+
+    // We will never get here
     return 0;
 }
 
