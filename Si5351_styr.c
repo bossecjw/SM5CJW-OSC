@@ -59,15 +59,19 @@ void sleep(uint16_t millisec)
 
 // Defines for frequency ranges
 
-#define CLK0_BASE    3500000UL
-#define CLK0_COARSE   100000UL
-#define CLK0_FINE      10000UL
+#define CLK0_BASE     3498000UL
+#define CLK0_COARSE    102400UL
+#define CLK0_FINE       10240UL
+//BFO
+#define CLK2_FREQ    10700000UL
 
 int main()
 {
     int newVal, oldVal = 0;
     int32_t range0 = 0, range1 = 0;
+    uint64_t oldFreq = 0;
     int potMode = 0;
+    int bfoActive = 0;
     // Initialize pins
     CLRBIT(DDRB, POT_PIN); // Pot = input
     CLRBIT(DDRB, DIG_PIN); // Dig = input
@@ -88,6 +92,10 @@ int main()
     si5351_output_enable(SI5351_CLK0, 1);
     si5351_set_freq(CLK0_BASE, SI5351_CLK0);
     si5351_drive_strength(SI5351_CLK0, SI5351_DRIVE_2MA);
+    //Set BFO
+    si5351_output_enable(SI5351_CLK2, 0);
+    si5351_set_freq(CLK2_FREQ, SI5351_CLK2);
+    si5351_drive_strength(SI5351_CLK2, SI5351_DRIVE_2MA);
 
     // There will be some inherent error in the reference crystal's actual frequency, so we can measure the difference between the actual and nominal output frequency in Hz, multiply by 10, make it an integer, and enter this correction factor into the library.
     //si5351_set_correction(-900);
@@ -97,11 +105,29 @@ int main()
         // Handle button presses. Switch between coarse and fine mode (potMode 0=Coarse, 1=Fine).
         newVal = digitalRead();
         if(oldVal != newVal && !newVal) {
-            potMode = !potMode;
-            if(potMode)
-                SETBIT(PORTB, LED_PIN);
+            int cnt = 1000;
+            while(!newVal && cnt > 0) {
+                cnt--;
+                _delay_ms(1);
+                newVal = digitalRead();
+            }
+
+            // Long press
+            if(cnt <= 0) {
+                //Toggle bfo
+                bfoActive = !bfoActive;
+                si5351_output_enable(SI5351_CLK2, bfoActive);
+            }
+            // Short press
             else
-                CLRBIT(PORTB, LED_PIN);
+            {
+                //Toggle coarse and fine pot mode
+                potMode = !potMode;
+                if(potMode)
+                    SETBIT(PORTB, LED_PIN);
+                else
+                    CLRBIT(PORTB, LED_PIN);
+            }
         }
         oldVal = newVal;
 
@@ -117,7 +143,11 @@ int main()
             range0 = (val * CLK0_COARSE) >> ADCBITS;
         }
         // Set frequency
-        si5351_set_freq(CLK0_BASE + range0 + range1, SI5351_CLK0);
+        uint64_t newFreq = CLK0_BASE + range0 + range1;
+        // Only set if value has changed
+        if(newFreq != oldFreq)
+            si5351_set_freq(newFreq, SI5351_CLK0);
+        oldFreq = newFreq;
     }
 
     // We will never get here
