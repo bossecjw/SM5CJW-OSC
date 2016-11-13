@@ -59,17 +59,20 @@ void sleep(uint16_t millisec)
 
 // Defines for frequency ranges
 
-#define CLK0_BASE     3498000UL
+#define CLK0_BASE     3498800UL
 #define CLK0_COARSE    102400UL
 #define CLK0_FINE       10240UL
+//calibrator 1 MHz
+#define CLK1_FREQ     2000000UL
 //BFO
 #define CLK2_FREQ    10700000UL
 
 int main()
 {
-    int newVal, oldVal = 0;
+    int hysteresDir = 0; // 1=up, 0=down
+    int newButtonVal, oldButtonVal = 0;
     int32_t range0 = 0, range1 = 0;
-    uint64_t oldFreq = 0;
+    int oldPotVal = 0;
     int potMode = 0;
     int bfoActive = 0;
     // Initialize pins
@@ -92,24 +95,31 @@ int main()
     si5351_output_enable(SI5351_CLK0, 1);
     si5351_set_freq(CLK0_BASE, SI5351_CLK0);
     si5351_drive_strength(SI5351_CLK0, SI5351_DRIVE_2MA);
+    //Set calibrator
+    si5351_output_enable(SI5351_CLK1, 1);
+    si5351_set_freq(CLK1_FREQ, SI5351_CLK1);
+    si5351_drive_strength(SI5351_CLK1, SI5351_DRIVE_2MA);
     //Set BFO
     si5351_output_enable(SI5351_CLK2, 0);
     si5351_set_freq(CLK2_FREQ, SI5351_CLK2);
     si5351_drive_strength(SI5351_CLK2, SI5351_DRIVE_2MA);
 
     // There will be some inherent error in the reference crystal's actual frequency, so we can measure the difference between the actual and nominal output frequency in Hz, multiply by 10, make it an integer, and enter this correction factor into the library.
-    //si5351_set_correction(-900);
+    si5351_set_correction(-10);
 
     while(1)
     {
+        /**
+          HANDLE BUTTON PRESSES
+          */
         // Handle button presses. Switch between coarse and fine mode (potMode 0=Coarse, 1=Fine).
-        newVal = digitalRead();
-        if(oldVal != newVal && !newVal) {
+        newButtonVal = digitalRead();
+        if(oldButtonVal != newButtonVal && !newButtonVal) {
             int cnt = 1000;
-            while(!newVal && cnt > 0) {
+            while(!newButtonVal && cnt > 0) {
                 cnt--;
                 _delay_ms(1);
-                newVal = digitalRead();
+                newButtonVal = digitalRead();
             }
 
             // Long press
@@ -129,25 +139,45 @@ int main()
                     CLRBIT(PORTB, LED_PIN);
             }
         }
-        oldVal = newVal;
+        oldButtonVal = newButtonVal;
 
+        /**
+          HANDLE POTENTIOMETER
+          */
         // Read pot
-        uint16_t val = analogRead();
-        // Set fine
-        if(potMode) {
-            range1 = (val * CLK0_FINE) >> ADCBITS;
-            range1 = range1 - (CLK0_FINE/2);
+        uint16_t newPotVal = analogRead();
+        // Detect hysteresis, only change if same direction, or 2 steps
+        int shouldSetNew = 0;
+        int diff = newPotVal - oldPotVal;
+        if(diff > 1) shouldSetNew = 1;
+        if(diff < -1) shouldSetNew = 1;
+        if(hysteresDir == 1) {
+            if(diff > 0) shouldSetNew = 1;
+        } else {
+            if(diff < 0) shouldSetNew = 1;
         }
-        // Set coarse
-        else {
-            range0 = (val * CLK0_COARSE) >> ADCBITS;
-        }
-        // Set frequency
-        uint64_t newFreq = CLK0_BASE + range0 + range1;
-        // Only set if value has changed
-        if(newFreq != oldFreq)
+
+        if(shouldSetNew) {
+            if(diff > 0)
+                hysteresDir = 1; //up
+            else
+                hysteresDir = 0; //down
+
+            // Set fine
+            if(potMode) {
+                range1 = (newPotVal * CLK0_FINE) >> ADCBITS;
+                range1 = range1 - (CLK0_FINE/2);
+            }
+            // Set coarse
+            else {
+                range0 = (newPotVal * CLK0_COARSE) >> ADCBITS;
+            }
+            // Set frequency
+            uint64_t newFreq = CLK0_BASE + range0 + range1;
+
             si5351_set_freq(newFreq, SI5351_CLK0);
-        oldFreq = newFreq;
+            oldPotVal = newPotVal;
+        }
     }
 
     // We will never get here
