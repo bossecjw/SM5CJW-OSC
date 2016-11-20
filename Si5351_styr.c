@@ -57,15 +57,31 @@ void sleep(uint16_t millisec)
     }
 }
 
+/* Valid defines for divider:
+ *
+ * SI5351_OUTPUT_CLK_DIV_1
+ * SI5351_OUTPUT_CLK_DIV_2
+ * SI5351_OUTPUT_CLK_DIV_4
+ * SI5351_OUTPUT_CLK_DIV_8
+ * SI5351_OUTPUT_CLK_DIV_16
+ * SI5351_OUTPUT_CLK_DIV_32
+ * SI5351_OUTPUT_CLK_DIV_64
+ * SI5351_OUTPUT_CLK_DIV_128
+ *
+ */
+
 // Defines for frequency ranges
 
-#define CLK0_BASE     3498800UL
-#define CLK0_COARSE    102400UL
-#define CLK0_FINE       10240UL
-//calibrator 1 MHz
-#define CLK1_FREQ     2000000UL
+#define CLK0_BASE      3498800UL
+#define CLK0_COARSE     102400UL
+#define CLK0_FINE        10240UL
+#define CLK0_DIV     SI5351_OUTPUT_CLK_DIV_4
+//calibrator 3 MHz
+#define CLK1_FREQ     3000000UL
+#define CLK1_DIV     SI5351_OUTPUT_CLK_DIV_64
 //BFO
 #define CLK2_FREQ    10700000UL
+#define CLK2_DIV     SI5351_OUTPUT_CLK_DIV_64
 
 int main()
 {
@@ -98,10 +114,12 @@ int main()
     //Set calibrator
     si5351_output_enable(SI5351_CLK1, 1);
     si5351_set_freq(CLK1_FREQ, SI5351_CLK1);
+    si5351_set_ms_div(SI5351_CLK1, CLK1_DIV, (CLK1_DIV == SI5351_OUTPUT_CLK_DIV_4) ? 1 : 0 );
     si5351_drive_strength(SI5351_CLK1, SI5351_DRIVE_2MA);
     //Set BFO
     si5351_output_enable(SI5351_CLK2, 0);
     si5351_set_freq(CLK2_FREQ, SI5351_CLK2);
+    si5351_set_ms_div(SI5351_CLK2, CLK2_DIV, (CLK2_DIV == SI5351_OUTPUT_CLK_DIV_4) ? 1 : 0 );
     si5351_drive_strength(SI5351_CLK2, SI5351_DRIVE_2MA);
 
     // There will be some inherent error in the reference crystal's actual frequency, so we can measure the difference between the actual and nominal output frequency in Hz, multiply by 10, make it an integer, and enter this correction factor into the library.
@@ -176,6 +194,7 @@ int main()
             uint64_t newFreq = CLK0_BASE + range0 + range1;
 
             si5351_set_freq(newFreq, SI5351_CLK0);
+            si5351_set_ms_div(SI5351_CLK0, CLK0_DIV, (CLK0_DIV == SI5351_OUTPUT_CLK_DIV_4) ? 1 : 0 );
             oldPotVal = newPotVal;
         }
     }
