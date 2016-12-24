@@ -57,6 +57,11 @@ void sleep(uint16_t millisec)
     }
 }
 
+// 3 separate oscillators in the frequency range 14 kHz - 110 MHz
+//
+// If a divider must be used (f < 1800 kHz) - set the frequency DIV times higher
+// (DIV = 1, 2, 4, 8, 16, 32, 64 or 128)
+
 /* Valid defines for divider:
  *
  * SI5351_OUTPUT_CLK_DIV_1
@@ -67,21 +72,25 @@ void sleep(uint16_t millisec)
  * SI5351_OUTPUT_CLK_DIV_32
  * SI5351_OUTPUT_CLK_DIV_64
  * SI5351_OUTPUT_CLK_DIV_128
- *
  */
 
 // Defines for frequency ranges
 
-#define CLK0_BASE      3498800UL
+// VFO 3498.8 - 3601.2 kHz (as an example)
+// BASE = lowest frequency (f1), Hz
+// COARSE = tuning range (f2 - f1), Hz, max 4 MHz!!
+// FINE = fine tuning range +/-5 kHz in 10 Hz steps (as an example), Hz
+
+#define CLK0_BASE      3498000UL
 #define CLK0_COARSE     102400UL
 #define CLK0_FINE        10240UL
-#define CLK0_DIV     SI5351_OUTPUT_CLK_DIV_4
-//calibrator 3 MHz
-#define CLK1_FREQ     3000000UL
-#define CLK1_DIV     SI5351_OUTPUT_CLK_DIV_64
-//BFO
-#define CLK2_FREQ    10700000UL
-#define CLK2_DIV     SI5351_OUTPUT_CLK_DIV_64
+#define CLK0_DIV     SI5351_OUTPUT_CLK_DIV_1
+//calibrator 1 MHz (as an example)
+#define CLK1_FREQ      10700000UL
+#define CLK1_DIV     SI5351_OUTPUT_CLK_DIV_1
+//BFO 455 kHz (as an example)
+#define CLK2_FREQ      1820000UL
+#define CLK2_DIV     SI5351_OUTPUT_CLK_DIV_4
 
 int main()
 {

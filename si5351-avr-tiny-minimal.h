@@ -27,7 +27,11 @@
 
 /* Define definitions */
 
+// "Old", working on prototype board: 0xc0
+// Original code: 0x60
+//#define SI5351_BUS_BASE_ADDR				  0x60
 #define SI5351_BUS_BASE_ADDR				  0xc0
+
 #define SI5351_XTAL_FREQ					    25000000
 #define SI5351_PLL_FIXED					    900000000ULL
 
