@@ -57,7 +57,7 @@ void sleep(uint16_t millisec)
     }
 }
 
-// 3 separate oscillators in the frequency range 14 kHz - 110 MHz
+// 3 separate oscillators in the frequency range 14 kHz - 114 MHz
 //
 // If a divider must be used (f < 1800 kHz) - set the frequency DIV times higher
 // (DIV = 1, 2, 4, 8, 16, 32, 64 or 128)
@@ -74,20 +74,21 @@ void sleep(uint16_t millisec)
  * SI5351_OUTPUT_CLK_DIV_128
  */
 
-// Defines for frequency ranges
+// Defines for frequency ranges 1800 kHz to 114 MHz
 
 // VFO 3498.8 - 3601.2 kHz (as an example)
 // BASE = lowest frequency (f1), Hz
-// COARSE = tuning range (f2 - f1), Hz, max 4 MHz!!
+// COARSE = tuning range (f2 - f1), Hz
 // FINE = fine tuning range +/-5 kHz in 10 Hz steps (as an example), Hz
 
-#define CLK0_BASE      3498000UL
-#define CLK0_COARSE     102400UL
+#define CLK0_BASE      100000000UL
+#define CLK0_COARSE    10240000UL
+
 #define CLK0_FINE        10240UL
 #define CLK0_DIV     SI5351_OUTPUT_CLK_DIV_1
 //calibrator 1 MHz (as an example)
-#define CLK1_FREQ      10700000UL
-#define CLK1_DIV     SI5351_OUTPUT_CLK_DIV_1
+#define CLK1_FREQ      2000000UL
+#define CLK1_DIV     SI5351_OUTPUT_CLK_DIV_2
 //BFO 455 kHz (as an example)
 #define CLK2_FREQ      1820000UL
 #define CLK2_DIV     SI5351_OUTPUT_CLK_DIV_4
@@ -96,7 +97,7 @@ int main()
 {
     int hysteresDir = 0; // 1=up, 0=down
     int newButtonVal, oldButtonVal = 0;
-    int32_t range0 = 0, range1 = 0;
+    int64_t range0 = 0, range1 = 0;
     int oldPotVal = 0;
     int potMode = 0;
     int bfoActive = 0;
@@ -131,8 +132,8 @@ int main()
     si5351_set_ms_div(SI5351_CLK2, CLK2_DIV, (CLK2_DIV == SI5351_OUTPUT_CLK_DIV_4) ? 1 : 0 );
     si5351_drive_strength(SI5351_CLK2, SI5351_DRIVE_2MA);
 
-    // There will be some inherent error in the reference crystal's actual frequency, so we can measure the difference between the actual and nominal output frequency in Hz, multiply by 10, make it an integer, and enter this correction factor into the library.
-    si5351_set_correction(-10);
+    // There will be some inherent error in the reference crystal's actual frequency, so we can measure the difference (f - fnom ) between the actual and nominal output frequency in Hz, enter this figure into the library.
+    si5351_set_correction(40);
 
     while(1)
     {
@@ -192,12 +193,12 @@ int main()
 
             // Set fine
             if(potMode) {
-                range1 = (newPotVal * CLK0_FINE) >> ADCBITS;
+                range1 = ((uint64_t)newPotVal * CLK0_FINE) >> ADCBITS;
                 range1 = range1 - (CLK0_FINE/2);
             }
             // Set coarse
             else {
-                range0 = (newPotVal * CLK0_COARSE) >> ADCBITS;
+                range0 = ((uint64_t)newPotVal * CLK0_COARSE) >> ADCBITS;
             }
             // Set frequency
             uint64_t newFreq = CLK0_BASE + range0 + range1;
