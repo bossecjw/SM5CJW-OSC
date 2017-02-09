@@ -27,11 +27,7 @@
 
 /* Define definitions */
 
-// "Old", working on prototype board: 0xc0
-// Original code: 0x60
-//#define SI5351_BUS_BASE_ADDR				  0x60
-#define SI5351_BUS_BASE_ADDR				  0xc0
-
+#define SI5351_BUS_BASE_ADDR				  0xc4
 #define SI5351_XTAL_FREQ					    25000000
 #define SI5351_PLL_FIXED					    900000000ULL
 
@@ -206,7 +202,7 @@ enum si5351_clock_fanout {SI5351_FANOUT_CLKIN, SI5351_FANOUT_XO, SI5351_FANOUT_M
 
 struct Si5351Frac
 {
-	uint16_t a;
+	uint32_t a;
 	uint32_t b;
 	uint32_t c;
 };
