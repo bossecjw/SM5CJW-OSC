@@ -1,5 +1,4 @@
-//CONTROL PROGRAM FOR ARDF RECEIVER 80m18 VFO
-//Ändrad CLK1 --->  CLK0  (signal på CLK1 var för svag)
+//CONTROL PROGRAM FOR ARDF RECEIVER 80m20 VFO   2019-11-08
 
 #include "sysconf.h"
 
@@ -79,24 +78,24 @@ void sleep(uint16_t millisec)
 
 // Defines for frequency ranges 1800 kHz to 114 MHz
 
-// VFO 1749 -1806 kHz for 80m17 Polyakov mixer (on CLK2)
-// BASE = lowest frequency (f1), Hz   here: 1749 kHz
-// COARSE = tuning range (f2 - f1), Hz   here: 51200 Hz
-// FINE = fine tuning range +/-5 FINE/2 Hz in 1024 steps  here: 10240 Hz
+// VFO 12486 - 12600 kHz for 80m20 mixer SA612AD (on CLK0)
+// BASE = lowest frequency (f1), Hz   here: 12486 kHz
+// COARSE = tuning range (f2 - f1), Hz   here: 102400 Hz
+// FINE = fine tuning range +/- 5120 Hz in 1024 10 Hz steps  here: 10240 Hz
 
-// Output 2   here VFO output
+// Output 0   here VFO output
 
-#define CLK2_BASE       3500000UL
-#define CLK2_COARSE      102400UL
+#define CLK0_BASE      12486000UL
+#define CLK0_COARSE      102400UL
 
-#define CLK2_FINE       10240UL
-#define CLK2_DIV     SI5351_OUTPUT_CLK_DIV_1
-// Output 0   here: disabled
-#define CLK0_FREQ      3550000UL
+#define CLK0_FINE         10240UL
 #define CLK0_DIV     SI5351_OUTPUT_CLK_DIV_1
-// Output 1   here: disabled
-#define CLK1_FREQ      1820000UL
-#define CLK1_DIV     SI5351_OUTPUT_CLK_DIV_4
+// Output 1   here: Calibrator (after 10 seconds on pushbutton)
+#define CLK1_FREQ      3579545UL
+#define CLK1_DIV     SI5351_OUTPUT_CLK_DIV_1
+// Output 2   here: disabled
+#define CLK2_FREQ      1820000UL
+#define CLK2_DIV     SI5351_OUTPUT_CLK_DIV_4
 
 int main()
 {
@@ -105,7 +104,7 @@ int main()
     int64_t range0 = 0, range1 = 0;
     int oldPotVal = 0;
     int potMode = 0;
-    int bfoActive = 0;
+    int calActive = 0;
     // Initialize pins
     CLRBIT(DDRB, POT_PIN); // Pot = input
     CLRBIT(DDRB, DIG_PIN); // Dig = input
@@ -123,19 +122,19 @@ int main()
     // Initialize si5351a library
     si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0);
 
-    si5351_output_enable(SI5351_CLK2, 1);
-    si5351_set_freq(CLK2_BASE, SI5351_CLK2);
-    si5351_drive_strength(SI5351_CLK2, SI5351_DRIVE_2MA);
+    si5351_output_enable(SI5351_CLK0, 1);
+    si5351_set_freq(CLK0_BASE, SI5351_CLK0);
+    si5351_drive_strength(SI5351_CLK0, SI5351_DRIVE_8MA);
     //Set calibrator
-    si5351_output_enable(SI5351_CLK0, 0);
-    si5351_set_freq(CLK0_FREQ, SI5351_CLK0);
-    si5351_set_ms_div(SI5351_CLK0, CLK0_DIV, (CLK0_DIV == SI5351_OUTPUT_CLK_DIV_4) ? 1 : 0 );
-    si5351_drive_strength(SI5351_CLK0, SI5351_DRIVE_2MA);
-    //Set BFO
     si5351_output_enable(SI5351_CLK1, 0);
     si5351_set_freq(CLK1_FREQ, SI5351_CLK1);
     si5351_set_ms_div(SI5351_CLK1, CLK1_DIV, (CLK1_DIV == SI5351_OUTPUT_CLK_DIV_4) ? 1 : 0 );
     si5351_drive_strength(SI5351_CLK1, SI5351_DRIVE_2MA);
+    //Set BFO
+    si5351_output_enable(SI5351_CLK2, 0);
+    si5351_set_freq(CLK2_FREQ, SI5351_CLK2);
+    si5351_set_ms_div(SI5351_CLK2, CLK2_DIV, (CLK2_DIV == SI5351_OUTPUT_CLK_DIV_4) ? 1 : 0 );
+    si5351_drive_strength(SI5351_CLK2, SI5351_DRIVE_2MA);
 
     // There will be some inherent error in the reference crystal's actual frequency, so we can measure the difference (f - fnom ) between the actual and nominal output frequency in Hz, enter this figure into the library.
     si5351_set_correction(40);
@@ -155,11 +154,11 @@ int main()
                 newButtonVal = digitalRead();
             }
 
-            // Long press
+            // Long press (> 10 seconds)
             if(cnt <= 0) {
-                //Toggle bfo
-                bfoActive = !bfoActive;
-                si5351_output_enable(SI5351_CLK0, bfoActive);
+                //Toggle calibrator
+                calActive = !calActive;
+                si5351_output_enable(SI5351_CLK1, calActive);
             }
             // Short press
             else
@@ -198,18 +197,18 @@ int main()
 
             // Set fine
             if(potMode) {
-                range1 = ((uint64_t)newPotVal * CLK2_FINE) >> ADCBITS;
-                range1 = range1 - (CLK2_FINE/2);
+                range1 = ((uint64_t)newPotVal * CLK0_FINE) >> ADCBITS;
+                range1 = range1 - (CLK0_FINE/2);
             }
             // Set coarse
             else {
-                range0 = ((uint64_t)newPotVal * CLK2_COARSE) >> ADCBITS;
+                range0 = ((uint64_t)newPotVal * CLK0_COARSE) >> ADCBITS; range1 = 0;
             }
             // Set frequency
-            uint64_t newFreq = CLK2_BASE + range0 + range1;
+            uint64_t newFreq = CLK0_BASE + range0 + range1;
 
-            si5351_set_freq(newFreq, SI5351_CLK2);
-            si5351_set_ms_div(SI5351_CLK2, CLK2_DIV, (CLK2_DIV == SI5351_OUTPUT_CLK_DIV_4) ? 1 : 0 );
+            si5351_set_freq(newFreq, SI5351_CLK0);
+            si5351_set_ms_div(SI5351_CLK0, CLK0_DIV, (CLK0_DIV == SI5351_OUTPUT_CLK_DIV_4) ? 1 : 0 );
             oldPotVal = newPotVal;
         }
     }
