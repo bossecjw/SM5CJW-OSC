@@ -97,14 +97,11 @@ void sleep(uint16_t millisec)
 #define CLK2_FREQ      1820000UL
 #define CLK2_DIV     SI5351_OUTPUT_CLK_DIV_4
 
-int main()
-{
-    int hysteresDir = 0; // 1=up, 0=down
-    int newButtonVal, oldButtonVal = 0;
-    int64_t range0 = 0, range1 = 0;
-    int oldPotVal = 0;
-    int potMode = 0;
-    int calActive = 0;
+/* ======================================= */
+/* FUNCTION THAT INITIALIZES Si5351 DEVICE */
+/* ======================================= */
+
+void initialize() {
     // Initialize pins
     CLRBIT(DDRB, POT_PIN); // Pot = input
     CLRBIT(DDRB, DIG_PIN); // Dig = input
@@ -138,82 +135,189 @@ int main()
 
     // There will be some inherent error in the reference crystal's actual frequency, so we can measure the difference (f - fnom ) between the actual and nominal output frequency in Hz, enter this figure into the library.
     si5351_set_correction(40);
+}
+
+/* ============================================= */
+/* FINITE STATE MACHINE DEFINITION AND FUNCTIONS */
+/* ============================================= */
+
+// Describe Finite State Machine states
+#define S_STEP_COARSE   0
+#define S_STEP_FINE     1
+#define S_CONT_COARSE   2
+#define S_CONT_FINE     3
+
+int isFine(int state) {
+    return (state == S_STEP_FINE) || (state == S_CONT_FINE);
+}
+
+int isCont(int state) {
+    return (state == S_CONT_COARSE) || (state == S_CONT_FINE);
+}
+
+#define LONG_PRESS_TIMER 10000
+
+// Traverse FSM with button presses, returns new state
+int handleFSM(int state) {
+    static int oldButtonVal = 0;
+
+    // Handle button presses. Switch between coarse and fine mode
+    int newButtonVal = digitalRead();
+    if(oldButtonVal != newButtonVal && !newButtonVal) {
+        int cnt = LONG_PRESS_TIMER;
+        while(!newButtonVal && cnt > 0) {
+            cnt--;
+            _delay_ms(1);
+            newButtonVal = digitalRead();
+        }
+
+        // Long press (> 10 seconds)
+        if(cnt <= 0) {
+            if(!isFine(state)) {
+                state = (state == S_STEP_COARSE) ? S_CONT_COARSE : S_STEP_COARSE; 
+            }
+        }
+        // Short press, Toggle coarse and fine state
+        else if(isFine(state)) {
+            state = (state == S_STEP_FINE) ? S_STEP_COARSE : S_CONT_COARSE;
+        } else {
+            state = (state == S_STEP_COARSE) ? S_STEP_FINE : S_CONT_FINE;
+        }
+    }
+    oldButtonVal = newButtonVal;
+
+    return state;
+}
+
+/* ==================== */
+/* LED CONTROL FUNCTION */
+/* ==================== */
+
+#define LED_BLINK_TIMER 200
+
+void handleLed(int state) {
+    static int ledTimer = 0;
+    static int ledState = 0;
+
+    if(isFine(state)) {
+        if(isCont(state)) {
+            SETBIT(PORTB, LED_PIN);
+        } else {
+            _delay_ms(1);
+            ledTimer++;
+            if(ledTimer >= LED_BLINK_TIMER) {
+                ledTimer = 0;
+                ledState = !ledState;
+                if(ledState) {
+                    SETBIT(PORTB, LED_PIN);
+                } else {
+                    CLRBIT(PORTB, LED_PIN);
+                }
+            }
+        }
+    } else {
+        CLRBIT(PORTB, LED_PIN);
+    }
+}
+
+/* ====================== */
+/* POTENTIOMETER FUNCTION */
+/* ====================== */
+
+#define POT_MAX     1034
+#define POT_STEPS   11
+#define STEP_STRIDE (POT_MAX / POT_STEPS)
+
+int64_t step_array[POT_STEPS] = {
+    /*  0 */ 12488200UL,
+    /*  1 */ 12498200UL,
+    /*  2 */ 12508200UL,
+    /*  3 */ 12518200UL,
+    /*  4 */ 12528200UL,
+    /*  5 */ 12538200UL,
+    /*  6 */ 12548200UL,
+    /*  7 */ 12558200UL,
+    /*  8 */ 12568200UL,
+    /*  9 */ 12578200UL,
+    /* 10 */ 12588200UL,
+};
+
+// Check if we want to change or not according to how much pot has moved, and what dir
+int potShouldSetNew(int diff, int hysteresDir) {
+    if(diff > 1) return 1;
+    if(diff < -1) return 1;
+    if(hysteresDir == 1) {
+        if(diff > 0) return 1;
+    } else {
+        if(diff < 0) return 1;
+    }
+    return 0;
+}
+
+void handlePot(int state) {
+    static int hysteresDir = 0; // 1=up, 0=down
+    static int64_t range_coarse = 0;
+    static int64_t range_fine = 0;
+    static int oldPotVal = 0;
+
+    // Read pot
+    uint16_t newPotVal = analogRead();
+    // Detect hysteresis, only change if same direction, or 2 steps
+    int diff = newPotVal - oldPotVal;
+
+    if(potShouldSetNew(diff, hysteresDir)) {
+        if(diff > 0)
+            hysteresDir = 1; //up
+        else
+            hysteresDir = 0; //down
+
+        /* State specific behavior */
+
+        // Set fine
+        if(isFine(state)) {
+            range_fine = ((uint64_t)newPotVal * CLK0_FINE) >> ADCBITS;
+            range_fine = range_fine - (CLK0_FINE/2);
+        } else { // Set coarse
+            range_fine = 0;
+            if(isCont(state)) {
+                int64_t coarse_freq = ((uint64_t)newPotVal * CLK0_COARSE) >> ADCBITS;
+                range_coarse = CLK0_BASE + coarse_freq;
+            } else {
+                int step = newPotVal / STEP_STRIDE;
+                range_coarse = step_array[step];
+            }
+        }
+
+        /* Set Si5351 CLK0 frequency */
+        uint64_t newFreq = range_coarse + range_fine;
+
+        si5351_set_freq(newFreq, SI5351_CLK0);
+        si5351_set_ms_div(SI5351_CLK0, CLK0_DIV, (CLK0_DIV == SI5351_OUTPUT_CLK_DIV_4) ? 1 : 0 );
+        oldPotVal = newPotVal;
+    }
+}
+
+/* ========= */
+/* MAIN LOOP */
+/* ========= */
+int main()
+{
+    int state = S_STEP_COARSE;
+
+    initialize();
 
     while(1)
     {
-        /**
-          HANDLE BUTTON PRESSES
-          */
-        // Handle button presses. Switch between coarse and fine mode (potMode 0=Coarse, 1=Fine).
-        newButtonVal = digitalRead();
-        if(oldButtonVal != newButtonVal && !newButtonVal) {
-            int cnt = 10000;
-            while(!newButtonVal && cnt > 0) {
-                cnt--;
-                _delay_ms(1);
-                newButtonVal = digitalRead();
-            }
+        // HANDLE BUTTON PRESSES
+        state = handleFSM(state);
 
-            // Long press (> 10 seconds)
-            if(cnt <= 0) {
-                //Toggle calibrator
-                calActive = !calActive;
-                si5351_output_enable(SI5351_CLK1, calActive);
-            }
-            // Short press
-            else
-            {
-                //Toggle coarse and fine pot mode
-                potMode = !potMode;
-                if(potMode)
-                    SETBIT(PORTB, LED_PIN);
-                else
-                    CLRBIT(PORTB, LED_PIN);
-            }
-        }
-        oldButtonVal = newButtonVal;
+        // HANDLE LED
+        handleLed(state);
 
-        /**
-          HANDLE POTENTIOMETER
-          */
-        // Read pot
-        uint16_t newPotVal = analogRead();
-        // Detect hysteresis, only change if same direction, or 2 steps
-        int shouldSetNew = 0;
-        int diff = newPotVal - oldPotVal;
-        if(diff > 1) shouldSetNew = 1;
-        if(diff < -1) shouldSetNew = 1;
-        if(hysteresDir == 1) {
-            if(diff > 0) shouldSetNew = 1;
-        } else {
-            if(diff < 0) shouldSetNew = 1;
-        }
-
-        if(shouldSetNew) {
-            if(diff > 0)
-                hysteresDir = 1; //up
-            else
-                hysteresDir = 0; //down
-
-            // Set fine
-            if(potMode) {
-                range1 = ((uint64_t)newPotVal * CLK0_FINE) >> ADCBITS;
-                range1 = range1 - (CLK0_FINE/2);
-            }
-            // Set coarse
-            else {
-                range0 = ((uint64_t)newPotVal * CLK0_COARSE) >> ADCBITS; range1 = 0;
-            }
-            // Set frequency
-            uint64_t newFreq = CLK0_BASE + range0 + range1;
-
-            si5351_set_freq(newFreq, SI5351_CLK0);
-            si5351_set_ms_div(SI5351_CLK0, CLK0_DIV, (CLK0_DIV == SI5351_OUTPUT_CLK_DIV_4) ? 1 : 0 );
-            oldPotVal = newPotVal;
-        }
+        // HANDLE POTENTIOMETER
+        handlePot(state);
     }
 
     // We will never get here
     return 0;
 }
-
