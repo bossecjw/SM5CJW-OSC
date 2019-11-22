@@ -6,3 +6,4 @@
 *.lst
 *.srec
 *~
+.vscode
