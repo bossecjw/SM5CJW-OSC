@@ -229,17 +229,17 @@ void handleLed(int state) {
 #define STEP_STRIDE (POT_MAX / POT_STEPS)
 
 int64_t step_array[POT_STEPS] = {
-    /*  0 */ 12486000UL,
-    /*  1 */ 12496000UL,
-    /*  2 */ 12506000UL,
-    /*  3 */ 12516000UL,
-    /*  4 */ 12526000UL,
-    /*  5 */ 12536000UL,
-    /*  6 */ 12546000UL,
-    /*  7 */ 12556000UL,
-    /*  8 */ 12566000UL,
-    /*  9 */ 12576000UL,
-    /* 10 */ 12586000UL,
+    /*  0 */ 12488200UL,
+    /*  1 */ 12498200UL,
+    /*  2 */ 12508200UL,
+    /*  3 */ 12518200UL,
+    /*  4 */ 12528200UL,
+    /*  5 */ 12538200UL,
+    /*  6 */ 12548200UL,
+    /*  7 */ 12558200UL,
+    /*  8 */ 12568200UL,
+    /*  9 */ 12578200UL,
+    /* 10 */ 12588200UL,
 };
 
 // Check if we want to change or not according to how much pot has moved, and what dir
