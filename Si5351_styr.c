@@ -150,9 +150,10 @@ void initialize() {
 int isFine(int state) {
     return (state == S_STEP_FINE) || (state == S_CONT_FINE);
 }
-
-int isCont(int state) {
-    return state == S_CONT_COARSE || state == S_CONT_FINE;
+    /*  7 */ 12556000UL,
+    /*  8 */ 12566000UL,
+    /*  9 */ 12576000UL,
+    /* 10 */ 12586000UL,
 }
 
 #define LONG_PRESS_TIMER 10000
@@ -193,7 +194,7 @@ int handleFSM(int state) {
 /* LED CONTROL FUNCTION */
 /* ==================== */
 
-#define LED_BLINK_TIMER 500
+#define LED_BLINK_TIMER 200
 
 void handleLed(int state) {
     static int ledTimer = 0;
