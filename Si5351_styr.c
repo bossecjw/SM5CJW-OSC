@@ -150,10 +150,9 @@ void initialize() {
 int isFine(int state) {
     return (state == S_STEP_FINE) || (state == S_CONT_FINE);
 }
-    /*  7 */ 12556000UL,
-    /*  8 */ 12566000UL,
-    /*  9 */ 12576000UL,
-    /* 10 */ 12586000UL,
+
+int isCont(int state) {
+    return (state == S_CONT_COARSE) || (state == S_CONT_FINE);
 }
 
 #define LONG_PRESS_TIMER 10000
@@ -243,6 +242,18 @@ int64_t step_array[POT_STEPS] = {
     /* 10 */ 12586000UL,
 };
 
+// Check if we want to change or not according to how much pot has moved, and what dir
+int potShouldSetNew(int diff, int hysteresDir) {
+    if(diff > 1) return 1;
+    if(diff < -1) return 1;
+    if(hysteresDir == 1) {
+        if(diff > 0) return 1;
+    } else {
+        if(diff < 0) return 1;
+    }
+    return 0;
+}
+
 void handlePot(int state) {
     static int hysteresDir = 0; // 1=up, 0=down
     static int64_t range_coarse = 0;
@@ -252,17 +263,9 @@ void handlePot(int state) {
     // Read pot
     uint16_t newPotVal = analogRead();
     // Detect hysteresis, only change if same direction, or 2 steps
-    int shouldSetNew = 0;
     int diff = newPotVal - oldPotVal;
-    if(diff > 1) shouldSetNew = 1;
-    if(diff < -1) shouldSetNew = 1;
-    if(hysteresDir == 1) {
-        if(diff > 0) shouldSetNew = 1;
-    } else {
-        if(diff < 0) shouldSetNew = 1;
-    }
 
-    if(shouldSetNew) {
+    if(potShouldSetNew(diff, hysteresDir)) {
         if(diff > 0)
             hysteresDir = 1; //up
         else
